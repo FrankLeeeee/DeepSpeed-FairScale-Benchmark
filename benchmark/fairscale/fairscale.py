@@ -7,18 +7,19 @@ from fairscale.nn import ShardedDataParallel, FullyShardedDataParallel
 
 
 def run_iter(model, optimizer, criterion):
-    img = torch.rand(BATCH_SIZE, 3, IMG_SIZE, IMG_SIZE).cuda()
+    img = torch.rand(BATCH_SIZE, 3, IMG_SIZE, IMG_SIZE).cuda().half()
     label = torch.randint(0, NUM_CLASS, (BATCH_SIZE, )).cuda()
-
     optimizer.zero_grad()
-    with torch.cuda.amp.autocast():
-        out = model(img)
-        loss = criterion(out, label)
+    out = model(img)
+    loss = criterion(out, label)
     loss.backward()
     optimizer.step()
 
 
 def init(model, criterion, stage):
+    if stage < 3:
+        model = model.half()
+
     if stage > 0:
         optimizer = OSS(params=model.parameters(), optim=OPTIM, lr=0.001)
 
@@ -27,7 +28,7 @@ def init(model, criterion, stage):
     elif stage == 2:
         model = ShardedDataParallel(model, optimizer)
     elif stage == 3:
-        model = FullyShardedDataParallel(model)
+        model = FullyShardedDataParallel(model, mixed_precision=True)
 
     criterion = torch.nn.CrossEntropyLoss()
     return model, optimizer, criterion
