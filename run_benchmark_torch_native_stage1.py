@@ -9,15 +9,17 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 
 
 def run_iter(model, optimizer, criterion):
-    img = torch.rand(BATCH_SIZE, 3, IMG_SIZE, IMG_SIZE).cuda().half()
+    img = torch.rand(BATCH_SIZE, 3, IMG_SIZE, IMG_SIZE).cuda()
     label = torch.randint(0, NUM_CLASS, (BATCH_SIZE, )).cuda()
 
     optimizer.zero_grad()
-    out = model(img)
-    out = out.float()
-    loss = criterion(out, label)
+
+    with torch.cuda.amp.autocast():
+        out = model(img)
+        loss = criterion(out, label)
     loss.backward()
     optimizer.step()
+
 
 def main():
     args = parse_args()
@@ -29,10 +31,12 @@ def main():
         print('initialized torch distributed')
         print(vars(args))
 
-    model = timm.models.vision_transformer.vit_large_patch16_224().cuda().half()
+    model = timm.models.vision_transformer.vit_large_patch16_224().cuda()
     model = DDP(model)
     criterion = torch.nn.CrossEntropyLoss()
-    optimizer = ZeroRedundancyOptimizer(model.parameters(), optimizer_class=torch.optim.Adam, lr=0.01)
+    optimizer = ZeroRedundancyOptimizer(model.parameters(),
+                                        optimizer_class=torch.optim.Adam,
+                                        lr=0.01)
 
     for _ in range(WARMUP):
         run_iter(model, optimizer, criterion)
